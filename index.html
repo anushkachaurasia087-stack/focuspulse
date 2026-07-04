@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FocusPulse - Smart Productivity Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f0f14;--bg2:#16161f;--bg3:#1e1e2a;--bg4:#252535;
+    --accent:#7c6bff;--accent2:#a78bfa;--accent3:#c4b5fd;
+    --green:#34d399;--amber:#fbbf24;--red:#f87171;--pink:#f472b6;--cyan:#22d3ee;
+    --text:#f1f0ff;--text2:#a8a6c0;--text3:#6b6880;
+    --border:rgba(124,107,255,0.15);--border2:rgba(255,255,255,0.06);
+    --card-bg:rgba(30,30,42,0.8);--glass:rgba(37,37,53,0.6);
+    --radius:12px;--radius2:8px;--transition:0.2s ease;
+  }
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+  .app{display:flex;min-height:100vh}
+
+  /* Sidebar */
+  .sidebar{width:240px;background:var(--bg2);border-right:1px solid var(--border2);display:flex;flex-direction:column;padding:20px 0;position:fixed;top:0;left:0;height:100vh;z-index:200;transition:transform 0.3s ease}
+  .main{margin-left:240px;flex:1;min-height:100vh}
+
+  /* Backdrop */
+  .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:199;backdrop-filter:blur(2px)}
+  .sidebar-backdrop.visible{display:block}
+
+  .topbar{background:var(--bg2);border-bottom:1px solid var(--border2);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+  .content{padding:28px}
+  .logo{padding:4px 20px 24px;display:flex;align-items:center;gap:10px}
+  .logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--pink));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .logo-text{font-size:15px;font-weight:700;background:linear-gradient(135deg,var(--accent3),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;transition:all var(--transition);color:var(--text2);font-size:14px;font-weight:500;border-left:3px solid transparent}
+  .nav-item:hover,.nav-item.active{color:var(--text);background:rgba(124,107,255,0.08);border-left-color:var(--accent)}
+  .nav-item .nav-icon{font-size:18px;width:20px;text-align:center}
+  .nav-badge{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px}
+  .sidebar-footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border2)}
+  .user-card{display:flex;align-items:center;gap:10px}
+  .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--pink));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+  .user-info{flex:1;min-width:0}
+  .user-name{font-size:13px;font-weight:600}
+  .user-email{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);padding:20px;backdrop-filter:blur(10px)}
+  .card-sm{padding:16px}
+  .grid{display:grid;gap:16px}
+  .grid-4{grid-template-columns:repeat(4,1fr)}
+  .grid-3{grid-template-columns:repeat(3,1fr)}
+  .grid-2{grid-template-columns:repeat(2,1fr)}
+  .stat-card{background:var(--card-bg);border:1px solid var(--border2);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden;transition:transform var(--transition),border-color var(--transition)}
+  .stat-card:hover{transform:translateY(-2px);border-color:var(--border)}
+  .stat-card::before{content:'';position:absolute;top:0;right:0;width:80px;height:80px;border-radius:50%;opacity:0.08;transform:translate(20px,-20px)}
+  .stat-card.purple::before{background:var(--accent)}
+  .stat-card.green::before{background:var(--green)}
+  .stat-card.amber::before{background:var(--amber)}
+  .stat-card.pink::before{background:var(--pink)}
+  .stat-label{font-size:12px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+  .stat-value{font-size:28px;font-weight:700;line-height:1}
+  .stat-sub{font-size:12px;color:var(--text2);margin-top:6px}
+  .stat-icon{font-size:22px;margin-bottom:10px}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius2);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all var(--transition)}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:#6d5cf0;transform:translateY(-1px)}
+  .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+  .btn-ghost:hover{background:var(--bg4);color:var(--text)}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-icon{padding:7px;border-radius:var(--radius2);background:transparent;border:1px solid var(--border2);cursor:pointer;color:var(--text2);transition:all var(--transition)}
+  .btn-icon:hover{background:var(--bg4);color:var(--text)}
+  input,select,textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);color:var(--text);font-size:14px;padding:9px 12px;outline:none;transition:border-color var(--transition);width:100%;font-family:inherit}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  select option{background:var(--bg3)}
+  label{font-size:13px;color:var(--text2);font-weight:500;margin-bottom:5px;display:block}
+  .form-group{margin-bottom:14px}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .task-item{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:all var(--transition)}
+  .task-item:hover{border-color:var(--border);background:var(--bg4)}
+  .task-item.done{opacity:0.55}
+  .task-check{width:20px;height:20px;border:2px solid var(--border2);border-radius:6px;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--transition)}
+  .task-check.checked{background:var(--green);border-color:var(--green);color:#000}
+  .task-body{flex:1;min-width:0}
+  .task-title{font-size:14px;font-weight:500;margin-bottom:4px}
+  .task-item.done .task-title{text-decoration:line-through;color:var(--text3)}
+  .task-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .task-actions{display:flex;gap:4px;margin-left:auto;flex-shrink:0}
+  .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-green{background:rgba(52,211,153,0.15);color:var(--green)}
+  .badge-amber{background:rgba(251,191,36,0.15);color:var(--amber)}
+  .badge-red{background:rgba(248,113,113,0.15);color:var(--red)}
+  .progress-bar{background:var(--bg4);border-radius:20px;height:8px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:20px;transition:width 0.8s ease;background:linear-gradient(90deg,var(--accent),var(--pink))}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(520px,95vw);max-height:90vh;overflow-y:auto}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+  .modal-title{font-size:18px;font-weight:700}
+  .chart-wrap{position:relative;width:100%}
+  .streak-card{background:linear-gradient(135deg,rgba(124,107,255,0.15),rgba(244,114,182,0.1));border:1px solid rgba(124,107,255,0.2);border-radius:var(--radius);padding:20px;text-align:center}
+  .streak-num{font-size:48px;font-weight:800;background:linear-gradient(135deg,var(--accent3),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+  .achieve-badge{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);padding:14px;text-align:center;transition:all var(--transition)}
+  .achieve-badge:hover{border-color:var(--border);transform:translateY(-2px)}
+  .achieve-badge.unlocked{border-color:rgba(251,191,36,0.3);background:rgba(251,191,36,0.05)}
+  .badge-icon{font-size:32px;margin-bottom:6px}
+  .badge-name{font-size:12px;font-weight:600;margin-bottom:3px}
+  .badge-desc{font-size:11px;color:var(--text3)}
+  .insight-card{background:linear-gradient(135deg,rgba(124,107,255,0.08),rgba(34,211,238,0.06));border:1px solid rgba(124,107,255,0.2);border-radius:var(--radius);padding:18px;position:relative;overflow:hidden}
+  .insight-card::before{content:'✨';position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:28px;opacity:0.2}
+  .insight-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--accent3);margin-bottom:6px}
+  .insight-text{font-size:14px;color:var(--text2);line-height:1.6}
+  .insight-highlight{color:var(--text);font-weight:600}
+  .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .section-title{font-size:18px;font-weight:700}
+  .section-sub{font-size:13px;color:var(--text3);margin-top:2px}
+  .page{display:none}
+  .page.active{display:block}
+  .tabs{display:flex;gap:4px;background:var(--bg3);border-radius:var(--radius2);padding:4px;margin-bottom:20px}
+  .tab{padding:7px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:all var(--transition);color:var(--text3)}
+  .tab.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+  .score-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
+  .score-center{position:absolute;text-align:center}
+  .score-num{font-size:32px;font-weight:800;line-height:1}
+  .score-lbl{font-size:11px;color:var(--text3)}
+  .quote-card{background:var(--bg3);border-left:3px solid var(--accent);border-radius:0 var(--radius2) var(--radius2) 0;padding:14px 16px}
+  .quote-text{font-size:14px;color:var(--text2);font-style:italic;line-height:1.6}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+  @keyframes confettiAnim{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(-200px) rotate(720deg);opacity:0}}
+  .fade-in{animation:fadeIn 0.3s ease forwards}
+  .pulse{animation:pulse 2s ease infinite}
+  .confetti-container{position:fixed;pointer-events:none;z-index:999;top:50%;left:50%;transform:translate(-50%,-50%)}
+  .confetti-piece{position:absolute;width:8px;height:8px;animation:confettiAnim 1s ease-out forwards}
+  .topbar-title{font-size:16px;font-weight:700}
+  .topbar-actions{display:flex;align-items:center;gap:8px}
+  .dark-toggle{background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all var(--transition)}
+  .dark-toggle:hover{border-color:var(--border);color:var(--text)}
+  .reason-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);padding:10px 14px;cursor:pointer;text-align:left;font-size:13px;color:var(--text2);transition:all var(--transition);width:100%}
+  .reason-btn:hover,.reason-btn.selected{background:rgba(124,107,255,0.1);border-color:var(--accent);color:var(--text)}
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+  @media(max-width:900px){
+    .sidebar{transform:translateX(-100%)}
+    .sidebar.open{transform:translateX(0)}
+    .main{margin-left:0}
+    .grid-4{grid-template-columns:repeat(2,1fr)}
+    .grid-3{grid-template-columns:1fr}
+    .form-row{grid-template-columns:1fr}
+    #menuToggle{display:flex!important}
+  }
+  @media(max-width:600px){
+    .grid-2{grid-template-columns:1fr}
+    .grid-4{grid-template-columns:1fr 1fr}
+    .content{padding:16px}
+  }
+  body.light-mode{
+    --bg:#f5f4ff;--bg2:#ffffff;--bg3:#f0effe;--bg4:#e8e6ff;
+    --text:#1a1830;--text2:#4b4870;--text3:#9896b5;
+    --border:rgba(124,107,255,0.25);--border2:rgba(124,107,255,0.12);
+    --card-bg:rgba(255,255,255,0.9)
+  }
+  body.light-mode input,body.light-mode select,body.light-mode textarea{background:var(--bg2);color:var(--text)}
+  body.light-mode .task-item,body.light-mode .achieve-badge{background:var(--bg2)}
+  body.light-mode .tabs{background:var(--bg3)}
+  body.light-mode .tab.active{background:var(--bg2)}
+  body.light-mode .reason-btn{background:var(--bg3)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <span class="logo-text">FocusPulse</span>
+    </div>
+    <nav id="nav">
+      <div class="nav-item active" data-page="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+      <div class="nav-item" data-page="tasks"><span class="nav-icon">✅</span>Tasks<span class="nav-badge" id="pendingBadge" style="display:none">0</span></div>
+      <div class="nav-item" data-page="analytics"><span class="nav-icon">📈</span>Analytics</div>
+      <div class="nav-item" data-page="streaks"><span class="nav-icon">🔥</span>Streaks</div>
+      <div class="nav-item" data-page="ai"><span class="nav-icon">🤖</span>AI Insights</div>
+      <div class="nav-item" data-page="achievements"><span class="nav-icon">🏆</span>Achievements</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="avatar" id="userAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name" id="userName">User</div>
+          <div class="user-email" id="userEmail">user@email.com</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn-icon" id="menuToggle" style="display:none" onclick="toggleSidebar()">☰</button>
+        <div>
+          <div class="topbar-title" id="pageTitle">Dashboard</div>
+          <div style="font-size:11px;color:var(--text3)" id="dateDisplay"></div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="dark-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Light</span></button>
+        <button class="btn btn-primary" onclick="openAddTask()">+ New Task</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div class="page active" id="page-dashboard">
+        <div class="grid grid-4" style="margin-bottom:20px">
+          <div class="stat-card purple fade-in"><div class="stat-icon">📋</div><div class="stat-label">Total Tasks</div><div class="stat-value" id="statTotal">0</div><div class="stat-sub">All time</div></div>
+          <div class="stat-card green fade-in"><div class="stat-icon">✅</div><div class="stat-label">Completed</div><div class="stat-value" id="statDone">0</div><div class="stat-sub" id="statDonePct">0% rate</div></div>
+          <div class="stat-card amber fade-in"><div class="stat-icon">⏳</div><div class="stat-label">Pending</div><div class="stat-value" id="statPending">0</div><div class="stat-sub" id="statOverdue">0 overdue</div></div>
+          <div class="stat-card pink fade-in"><div class="stat-icon">🔥</div><div class="stat-label">Current Streak</div><div class="stat-value" id="statStreak">0</div><div class="stat-sub">days in a row</div></div>
+        </div>
+        <div class="grid grid-2" style="margin-bottom:20px">
+          <div class="card">
+            <div class="section-header"><div><div class="section-title">Today's Progress</div><div class="section-sub" id="todayCount">0 of 0 tasks done</div></div><span id="todayPct" style="font-size:22px;font-weight:800;color:var(--accent)">0%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="todayBar" style="width:0%"></div></div>
+            <div style="margin-top:16px"><div style="font-size:13px;color:var(--text3);margin-bottom:10px">By category today</div><div id="catProgress"></div></div>
+          </div>
+          <div class="card"><div class="section-title" style="margin-bottom:14px">Weekly Snapshot</div><div class="chart-wrap" style="height:160px"><canvas id="miniWeekChart"></canvas></div></div>
+        </div>
+        <div class="grid grid-2">
+          <div><div class="section-header"><div class="section-title">Due Today & Upcoming</div><button class="btn btn-ghost btn-sm" onclick="navigate('tasks')">View all</button></div><div id="dashTaskList" style="display:flex;flex-direction:column;gap:8px"></div></div>
+          <div><div class="section-title" style="margin-bottom:14px">AI Motivation</div><div id="aiMotivation" style="display:flex;flex-direction:column;gap:10px"></div></div>
+        </div>
+      </div>
+
+      <!-- TASKS -->
+      <div class="page" id="page-tasks">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+          <input type="text" id="taskSearch" placeholder="Search tasks..." style="max-width:240px" oninput="renderTasks()">
+          <select id="taskFilter" onchange="renderTasks()" style="width:auto"><option value="all">All tasks</option><option value="pending">Pending</option><option value="done">Completed</option><option value="today">Due today</option></select>
+          <select id="catFilter" onchange="renderTasks()" style="width:auto"><option value="all">All categories</option><option value="Study">Study</option><option value="Coding">Coding</option><option value="Exercise">Exercise</option><option value="Work">Work</option><option value="Personal">Personal</option></select>
+          <select id="sortFilter" onchange="renderTasks()" style="width:auto"><option value="date">Sort by due date</option><option value="priority">Sort by priority</option><option value="created">Sort by created</option></select>
+        </div>
+        <div id="taskList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="noTasks" style="display:none;text-align:center;padding:60px 20px;color:var(--text3)"><div style="font-size:48px;margin-bottom:12px">📝</div><div style="font-size:16px;font-weight:600;margin-bottom:6px">No tasks found</div><div style="font-size:13px">Create your first task to get started</div></div>
+      </div>
+
+      <!-- ANALYTICS -->
+      <div class="page" id="page-analytics">
+        <div class="tabs" id="analyticsTab">
+          <div class="tab active" data-tab="daily">Daily</div>
+          <div class="tab" data-tab="weekly">Weekly</div>
+          <div class="tab" data-tab="monthly">Monthly</div>
+          <div class="tab" data-tab="category">By Category</div>
+        </div>
+        <div id="tab-daily">
+          <div class="grid grid-3" style="margin-bottom:20px">
+            <div class="card card-sm" style="text-align:center"><div class="stat-label">Today's Rate</div><div id="a_todayRate" class="stat-value" style="color:var(--green)">0%</div></div>
+            <div class="card card-sm" style="text-align:center"><div class="stat-label">Tasks Completed</div><div id="a_todayDone" class="stat-value" style="color:var(--accent)">0</div></div>
+            <div class="card card-sm" style="text-align:center"><div class="stat-label">Avg Daily Rate</div><div id="a_avgRate" class="stat-value" style="color:var(--amber)">0%</div></div>
+          </div>
+          <div class="card"><div class="section-title" style="margin-bottom:16px">Last 7 days productivity</div><div class="chart-wrap" style="height:260px"><canvas id="dailyChart"></canvas></div></div>
+        </div>
+        <div id="tab-weekly" style="display:none">
+          <div class="card" style="margin-bottom:16px"><div class="section-title" style="margin-bottom:16px">Weekly productivity</div><div class="chart-wrap" style="height:260px"><canvas id="weeklyChart"></canvas></div></div>
+          <div class="card"><div class="section-title" style="margin-bottom:16px">Completion trend</div><div class="chart-wrap" style="height:220px"><canvas id="weeklyTrendChart"></canvas></div></div>
+        </div>
+        <div id="tab-monthly" style="display:none">
+          <div class="card"><div class="section-title" style="margin-bottom:16px">Monthly completion</div><div class="chart-wrap" style="height:280px"><canvas id="monthlyChart"></canvas></div></div>
+        </div>
+        <div id="tab-category" style="display:none">
+          <div class="grid grid-2">
+            <div class="card"><div class="section-title" style="margin-bottom:16px">Completion by category</div><div class="chart-wrap" style="height:260px"><canvas id="catChart"></canvas></div></div>
+            <div class="card"><div class="section-title" style="margin-bottom:16px">Category breakdown</div><div id="catBreakdown" style="display:flex;flex-direction:column;gap:12px"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STREAKS -->
+      <div class="page" id="page-streaks">
+        <div class="grid grid-3" style="margin-bottom:20px">
+          <div class="streak-card"><div style="font-size:36px;margin-bottom:6px">🔥</div><div class="streak-num" id="currentStreak">0</div><div style="font-size:13px;color:var(--text2);margin-top:6px">Current streak</div></div>
+          <div class="streak-card" style="background:linear-gradient(135deg,rgba(251,191,36,0.12),rgba(244,114,182,0.08));border-color:rgba(251,191,36,0.2)"><div style="font-size:36px;margin-bottom:6px">🏆</div><div class="streak-num" id="longestStreak" style="background:linear-gradient(135deg,var(--amber),var(--pink))">0</div><div style="font-size:13px;color:var(--text2);margin-top:6px">Longest streak</div></div>
+          <div class="streak-card" style="background:linear-gradient(135deg,rgba(52,211,153,0.1),rgba(34,211,238,0.08));border-color:rgba(52,211,153,0.2)"><div style="font-size:36px;margin-bottom:6px">📅</div><div class="streak-num" id="totalActive" style="background:linear-gradient(135deg,var(--green),var(--cyan))">0</div><div style="font-size:13px;color:var(--text2);margin-top:6px">Active days total</div></div>
+        </div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title" style="margin-bottom:16px">Last 30 days activity</div>
+          <div id="activityGrid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--text3)"><span>Less</span><div style="width:12px;height:12px;background:var(--bg4);border-radius:3px"></div><div style="width:12px;height:12px;background:rgba(124,107,255,0.3);border-radius:3px"></div><div style="width:12px;height:12px;background:var(--accent);border-radius:3px"></div><span>More</span></div>
+        </div>
+        <div class="section-title" style="margin-bottom:14px">Streak milestones</div>
+        <div class="grid grid-3" id="milestones"></div>
+      </div>
+
+      <!-- AI -->
+      <div class="page" id="page-ai">
+        <div class="grid grid-2" style="margin-bottom:20px">
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="font-size:24px">🎯</div><div><div class="section-title">Success Score</div><div class="section-sub">Based on consistency & completion</div></div></div>
+            <div style="display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <div class="score-ring">
+                <svg width="140" height="140" viewBox="0 0 140 140"><circle cx="70" cy="70" r="58" fill="none" stroke="rgba(124,107,255,0.12)" stroke-width="12"/><circle id="scoreCircle" cx="70" cy="70" r="58" fill="none" stroke="url(#scoreGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="364.4" stroke-dashoffset="364.4" transform="rotate(-90 70 70)"/><defs><linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#7c6bff"/><stop offset="100%" style="stop-color:#f472b6"/></linearGradient></defs></svg>
+                <div class="score-center"><div class="score-num" id="scoreNum" style="color:var(--accent)">0</div><div class="score-lbl">/100</div></div>
+              </div>
+            </div>
+            <div id="scoreStrengths"></div>
+          </div>
+          <div class="card">
+            <div style="font-size:24px;margin-bottom:6px">🔮</div>
+            <div class="section-title" style="margin-bottom:4px">AI Prediction</div>
+            <div class="section-sub" style="margin-bottom:16px">Next week's forecast</div>
+            <div class="chart-wrap" style="height:180px;margin-bottom:16px"><canvas id="predChart"></canvas></div>
+            <div id="aiPredInsights" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="font-size:24px">🧠</div><div class="section-title">Missed Task Analysis</div></div>
+          <div id="missedAnalysis"></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="font-size:24px">💡</div><div class="section-title">Personalized Insights</div></div>
+          <button class="btn btn-primary" style="margin-bottom:16px" onclick="generateAIInsights()">🤖 Generate Fresh Insights</button>
+          <div id="aiInsightCards" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div id="aiLoading" style="display:none;text-align:center;padding:24px;color:var(--text3)"><div class="pulse" style="font-size:32px;margin-bottom:8px">🤖</div><div>Analyzing your productivity patterns...</div></div>
+          <div id="aiResponse" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- ACHIEVEMENTS -->
+      <div class="page" id="page-achievements">
+        <div class="card" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="section-title">Achievement Progress</div><span id="achieveCount" style="font-size:13px;color:var(--text3)">0 / 0 unlocked</span></div>
+          <div class="progress-bar" style="margin-top:10px"><div class="progress-fill" id="achieveBar" style="width:0%;background:linear-gradient(90deg,var(--amber),var(--pink))"></div></div>
+        </div>
+        <div class="grid grid-3" id="achieveGrid" style="margin-bottom:20px"></div>
+        <div class="card"><div class="section-title" style="margin-bottom:14px">Daily Quote</div><div class="quote-card"><div class="quote-text" id="dailyQuote"></div></div><button class="btn btn-ghost btn-sm" onclick="refreshQuote()" style="margin-top:10px">↺ New quote</button></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- TASK MODAL -->
+<div class="modal-overlay" id="taskModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modalTitle">New Task</div><button class="btn-icon" onclick="closeModal('taskModal')">✕</button></div>
+    <div class="form-group"><label>Title *</label><input type="text" id="taskTitle" placeholder="What do you need to do?"></div>
+    <div class="form-group"><label>Description</label><textarea id="taskDesc" rows="2" placeholder="Optional details..."></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Category</label><select id="taskCat"><option value="Study">📚 Study</option><option value="Coding">💻 Coding</option><option value="Exercise">🏋️ Exercise</option><option value="Work">💼 Work</option><option value="Personal">🌟 Personal</option></select></div>
+      <div class="form-group"><label>Priority</label><select id="taskPriority"><option value="low">🟢 Low</option><option value="medium" selected>🟡 Medium</option><option value="high">🔴 High</option></select></div>
+    </div>
+    <div class="form-group"><label>Due Date</label><input type="date" id="taskDue"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button class="btn btn-ghost" onclick="closeModal('taskModal')">Cancel</button><button class="btn btn-primary" onclick="saveTask()">Save Task</button></div>
+  </div>
+</div>
+
+<!-- REASON MODAL -->
+<div class="modal-overlay" id="reasonModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">Why was this task missed?</div><button class="btn-icon" onclick="closeModal('reasonModal')">✕</button></div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px" id="reasonTaskName"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px" id="reasonButtons"></div>
+    <div class="form-group"><label>Or describe in your own words:</label><input type="text" id="customReason" placeholder="Custom reason..."></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="closeModal('reasonModal')">Skip</button><button class="btn btn-primary" onclick="submitReason()">Save reason</button></div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal" style="display:flex">
+  <div class="modal">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:8px">⚡</div>
+      <div style="font-size:22px;font-weight:800;background:linear-gradient(135deg,var(--accent3),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent">FocusPulse</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px">Your AI-powered productivity companion</div>
+    </div>
+    <div class="tabs" id="authTabs" style="margin-bottom:20px">
+      <div class="tab active" onclick="switchAuth('login')">Log in</div>
+      <div class="tab" onclick="switchAuth('signup')">Sign up</div>
+    </div>
+    <div id="signupField" style="display:none"><div class="form-group"><label>Name</label><input type="text" id="authName" placeholder="Your name"></div></div>
+    <div class="form-group"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
+    <div id="authError" style="color:var(--red);font-size:13px;margin-bottom:10px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="handleAuth()" id="authBtn">Log in</button>
+    <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--text3)">Demo: any email & password (6+ chars)</div>
+  </div>
+</div>
+
+<div class="confetti-container" id="confetti" style="display:none"></div>
+
+<script>
+let state={user:null,tasks:[],missedReasons:[],currentTaskId:null,editingId:null,currentStreak:0,longestStreak:0,activeDays:[],charts:{},theme:'dark',selectedReason:null};
+const CATS={Study:{icon:'📚',color:'#a78bfa'},Coding:{icon:'💻',color:'#22d3ee'},Exercise:{icon:'🏋️',color:'#34d399'},Work:{icon:'💼',color:'#fbbf24'},Personal:{icon:'🌟',color:'#f472b6'}};
+const PRIORITIES={high:'🔴',medium:'🟡',low:'🟢'};
+const REASONS=['Lack of time','Low motivation','Forgot','Task was too difficult','Not important anymore'];
+const QUOTES=["Small steps every day lead to giant leaps over time.","Consistency is the bridge between goals and accomplishment.","Every completed task is a vote for the person you're becoming.","Progress, not perfection, is the goal.","Your future self is cheering for you. Don't let them down.","Discipline is choosing between what you want now and what you want most.","The secret to getting ahead is getting started.","Success is the sum of small efforts repeated day in and day out.","You don't have to be great to start, but you have to start to be great.","Focus on being productive instead of busy."];
+const ACHIEVEMENTS=[
+  {id:'first_task',icon:'🌱',name:'First Step',desc:'Complete your first task',check:s=>s.tasks.filter(t=>t.done).length>=1},
+  {id:'task_5',icon:'⭐',name:'Rising Star',desc:'Complete 5 tasks',check:s=>s.tasks.filter(t=>t.done).length>=5},
+  {id:'task_25',icon:'🌟',name:'Achiever',desc:'Complete 25 tasks',check:s=>s.tasks.filter(t=>t.done).length>=25},
+  {id:'streak_3',icon:'🔥',name:'On Fire',desc:'3-day streak',check:s=>s.longestStreak>=3},
+  {id:'streak_7',icon:'🔥',name:'Week Warrior',desc:'7-day streak',check:s=>s.longestStreak>=7},
+  {id:'streak_30',icon:'🏆',name:'Consistency King',desc:'30-day streak',check:s=>s.longestStreak>=30},
+  {id:'multi_cat',icon:'🎨',name:'Versatile',desc:'Tasks in 3+ categories',check:s=>new Set(s.tasks.filter(t=>t.done).map(t=>t.category)).size>=3},
+  {id:'perfect_day',icon:'💎',name:'Perfect Day',desc:'100% completion on any day',check:s=>{const b={};s.tasks.forEach(t=>{const d=t.dueDate||t.createdAt.split('T')[0];if(!b[d])b[d]={total:0,done:0};b[d].total++;if(t.done)b[d].done++;});return Object.values(b).some(v=>v.total>0&&v.done===v.total);}},
+  {id:'early_bird',icon:'🌅',name:'Early Bird',desc:'Create 3 tasks before 8 AM',check:s=>s.tasks.filter(t=>new Date(t.createdAt).getHours()<8).length>=3}
+];
+
+// SIDEBAR
+function toggleSidebar(){const s=document.getElementById('sidebar'),b=document.getElementById('sidebarBackdrop');s.classList.contains('open')?closeSidebar():(s.classList.add('open'),b.classList.add('visible'));}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarBackdrop').classList.remove('visible');}
+
+// AUTH
+let authMode='login';
+function switchAuth(mode){authMode=mode;document.querySelectorAll('#authTabs .tab').forEach((t,i)=>{t.classList.toggle('active',(i===0&&mode==='login')||(i===1&&mode==='signup'));});document.getElementById('signupField').style.display=mode==='signup'?'block':'none';document.getElementById('authBtn').textContent=mode==='signup'?'Create account':'Log in';document.getElementById('authError').style.display='none';}
+function handleAuth(){
+  const email=document.getElementById('authEmail').value.trim(),pass=document.getElementById('authPass').value,name=document.getElementById('authName').value.trim(),errEl=document.getElementById('authError');
+  if(!email||!email.includes('@')){errEl.textContent='Enter a valid email';errEl.style.display='block';return;}
+  if(pass.length<6){errEl.textContent='Password must be 6+ characters';errEl.style.display='block';return;}
+  const displayName=authMode==='signup'?(name||email.split('@')[0]):email.split('@')[0];
+  state.user={name:displayName,email,initials:displayName.slice(0,2).toUpperCase()};
+  document.getElementById('userAvatar').textContent=state.user.initials;
+  document.getElementById('userName').textContent=state.user.name;
+  document.getElementById('userEmail').textContent=state.user.email;
+  closeModal('authModal');seedDemoData();refreshAll();
+}
+
+function seedDemoData(){
+  const today=new Date().toISOString().split('T')[0],yesterday=new Date(Date.now()-86400000).toISOString().split('T')[0];
+  state.tasks=[
+    {id:1,title:'Review lecture notes',desc:'Chapter 5 and 6',category:'Study',priority:'high',dueDate:today,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
+    {id:2,title:'Build REST API endpoint',desc:'User auth routes',category:'Coding',priority:'high',dueDate:today,done:false,createdAt:new Date(Date.now()-86400000).toISOString()},
+    {id:3,title:'Morning run 5km',desc:'',category:'Exercise',priority:'medium',dueDate:today,done:true,createdAt:new Date(Date.now()-86400000).toISOString()},
+    {id:4,title:'Prepare weekly report',desc:'Sales & marketing metrics',category:'Work',priority:'medium',dueDate:today,done:false,createdAt:new Date().toISOString()},
+    {id:5,title:'Read 20 pages',desc:'Atomic Habits',category:'Personal',priority:'low',dueDate:yesterday,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
+    {id:6,title:'Practice algorithms',desc:'LeetCode medium problems',category:'Coding',priority:'high',dueDate:yesterday,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
+    {id:7,title:'Yoga session',desc:'30 minutes flow',category:'Exercise',priority:'low',dueDate:yesterday,done:false,missedReason:'Lack of time',createdAt:new Date(Date.now()-172800000).toISOString()},
+    {id:8,title:'Math homework',desc:'Calculus chapter 3',category:'Study',priority:'high',dueDate:new Date(Date.now()+86400000).toISOString().split('T')[0],done:false,createdAt:new Date().toISOString()},
+    {id:9,title:'Team standup prep',desc:'Review blockers',category:'Work',priority:'medium',dueDate:new Date(Date.now()+86400000).toISOString().split('T')[0],done:false,createdAt:new Date().toISOString()},
+  ];
+  state.missedReasons=[{reason:'Lack of time',category:'Exercise',count:3},{reason:'Low motivation',category:'Exercise',count:2},{reason:'Forgot',category:'Study',count:1}];
+  state.activeDays=[];
+  for(let i=0;i<30;i++){const d=new Date(Date.now()-i*86400000);state.activeDays.push({date:d.toISOString().split('T')[0],pct:i===0?60:i===1?100:i===2?80:Math.random()>0.3?Math.floor(Math.random()*80+20):0});}
+  state.currentStreak=5;state.longestStreak=12;
+}
+
+// NAVIGATION
+function navigate(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+  const titles={dashboard:'Dashboard',tasks:'Tasks',analytics:'Analytics',streaks:'Streaks & Activity',ai:'AI Insights',achievements:'Achievements'};
+  document.getElementById('pageTitle').textContent=titles[page]||page;
+  if(page==='analytics')renderAnalytics();
+  if(page==='streaks')renderStreaks();
+  if(page==='ai')renderAI();
+  if(page==='achievements')renderAchievements();
+  if(window.innerWidth<=900)closeSidebar();
+}
+document.querySelectorAll('[data-page]').forEach(el=>{el.addEventListener('click',()=>navigate(el.dataset.page));});
+
+// TASKS
+let nextId=10;
+function openAddTask(){state.editingId=null;document.getElementById('modalTitle').textContent='New Task';document.getElementById('taskTitle').value='';document.getElementById('taskDesc').value='';document.getElementById('taskCat').value='Study';document.getElementById('taskPriority').value='medium';document.getElementById('taskDue').value=new Date().toISOString().split('T')[0];openModal('taskModal');}
+function openEditTask(id){const t=state.tasks.find(t=>t.id===id);if(!t)return;state.editingId=id;document.getElementById('modalTitle').textContent='Edit Task';document.getElementById('taskTitle').value=t.title;document.getElementById('taskDesc').value=t.desc||'';document.getElementById('taskCat').value=t.category;document.getElementById('taskPriority').value=t.priority;document.getElementById('taskDue').value=t.dueDate||'';openModal('taskModal');}
+function saveTask(){const title=document.getElementById('taskTitle').value.trim();if(!title)return;const task={title,desc:document.getElementById('taskDesc').value.trim(),category:document.getElementById('taskCat').value,priority:document.getElementById('taskPriority').value,dueDate:document.getElementById('taskDue').value,done:false,createdAt:new Date().toISOString()};if(state.editingId){const idx=state.tasks.findIndex(t=>t.id===state.editingId);task.id=state.editingId;task.done=state.tasks[idx].done;task.createdAt=state.tasks[idx].createdAt;state.tasks[idx]=task;}else{task.id=nextId++;state.tasks.unshift(task);}closeModal('taskModal');refreshAll();}
+function deleteTask(id){if(confirm('Delete this task?')){state.tasks=state.tasks.filter(t=>t.id!==id);refreshAll();}}
+function toggleTask(id){const t=state.tasks.find(t=>t.id===id);if(!t)return;if(!t.done){t.done=true;doConfetti();checkMilestoneStreak();}else{t.done=false;}refreshAll();}
+function openReasonModal(task){document.getElementById('reasonTaskName').textContent=`"${task.title}"`;const btns=document.getElementById('reasonButtons');btns.innerHTML='';state.selectedReason=null;REASONS.forEach(r=>{const b=document.createElement('button');b.className='reason-btn';b.textContent=r;b.onclick=()=>{document.querySelectorAll('.reason-btn').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedReason=r;};btns.appendChild(b);});openModal('reasonModal');}
+function submitReason(){const custom=document.getElementById('customReason').value.trim(),reason=custom||state.selectedReason;if(reason&&state.currentTaskId){const t=state.tasks.find(x=>x.id===state.currentTaskId);if(t)t.missedReason=reason;const ex=state.missedReasons.find(r=>r.reason===reason&&r.category===t?.category);if(ex)ex.count++;else state.missedReasons.push({reason,category:t?.category||'Other',count:1});}closeModal('reasonModal');}
+
+function renderTasks(){
+  const search=document.getElementById('taskSearch')?.value.toLowerCase()||'',filter=document.getElementById('taskFilter')?.value||'all',cat=document.getElementById('catFilter')?.value||'all',sort=document.getElementById('sortFilter')?.value||'date',today=new Date().toISOString().split('T')[0];
+  let tasks=[...state.tasks];
+  if(search)tasks=tasks.filter(t=>t.title.toLowerCase().includes(search)||t.desc?.toLowerCase().includes(search));
+  if(filter==='pending')tasks=tasks.filter(t=>!t.done);if(filter==='done')tasks=tasks.filter(t=>t.done);if(filter==='today')tasks=tasks.filter(t=>t.dueDate===today);
+  if(cat!=='all')tasks=tasks.filter(t=>t.category===cat);
+  if(sort==='date')tasks.sort((a,b)=>(a.dueDate||'9999')>(b.dueDate||'9999')?1:-1);if(sort==='priority'){const p={high:0,medium:1,low:2};tasks.sort((a,b)=>p[a.priority]-p[b.priority]);}if(sort==='created')tasks.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const list=document.getElementById('taskList'),noTasks=document.getElementById('noTasks');if(!list)return;
+  if(tasks.length===0){list.innerHTML='';noTasks.style.display='block';return;}noTasks.style.display='none';list.innerHTML=tasks.map(t=>taskHTML(t,today)).join('');updatePendingBadge();
+}
+
+function taskHTML(t,today){
+  const overdue=t.dueDate&&t.dueDate<today&&!t.done,cat=CATS[t.category]||{icon:'📋',color:'#7c6bff'};
+  return `<div class="task-item ${t.done?'done':''}" style="${overdue?'border-color:rgba(248,113,113,0.3);':''}">
+    <div class="task-check ${t.done?'checked':''}" onclick="toggleTask(${t.id})">${t.done?'✓':''}</div>
+    <div class="task-body">
+      <div class="task-title">${t.title}</div>
+      <div class="task-meta">
+        <span class="badge" style="background:${cat.color}18;color:${cat.color}">${cat.icon} ${t.category}</span>
+        <span class="badge ${t.priority==='high'?'badge-red':t.priority==='medium'?'badge-amber':'badge-green'}">${PRIORITIES[t.priority]} ${t.priority}</span>
+        ${t.dueDate?`<span style="font-size:11px;color:${overdue?'var(--red)':'var(--text3)'}">📅 ${overdue?'Overdue: ':''}${t.dueDate}</span>`:''}
+        ${t.missedReason?`<span class="badge badge-red">Missed: ${t.missedReason}</span>`:''}
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="btn-icon" onclick="openEditTask(${t.id})">✏️</button>
+      <button class="btn-icon" onclick="deleteTask(${t.id})" style="color:var(--red)">🗑️</button>
+    </div>
+  </div>`;
+}
+
+// DASHBOARD
+function renderDashboard(){
+  const today=new Date().toISOString().split('T')[0],total=state.tasks.length,done=state.tasks.filter(t=>t.done).length,pending=total-done,todayTasks=state.tasks.filter(t=>t.dueDate===today),todayDone=todayTasks.filter(t=>t.done).length,pct=total>0?Math.round(done/total*100):0,todayPct=todayTasks.length>0?Math.round(todayDone/todayTasks.length*100):0,overdue=state.tasks.filter(t=>t.dueDate&&t.dueDate<today&&!t.done).length;
+  document.getElementById('statTotal').textContent=total;document.getElementById('statDone').textContent=done;document.getElementById('statDonePct').textContent=pct+'% rate';document.getElementById('statPending').textContent=pending;document.getElementById('statOverdue').textContent=overdue+' overdue';document.getElementById('statStreak').textContent=state.currentStreak;document.getElementById('todayCount').textContent=`${todayDone} of ${todayTasks.length} tasks done`;document.getElementById('todayPct').textContent=todayPct+'%';document.getElementById('todayBar').style.width=todayPct+'%';
+  const cats={};state.tasks.filter(t=>t.dueDate===today).forEach(t=>{if(!cats[t.category])cats[t.category]={total:0,done:0};cats[t.category].total++;if(t.done)cats[t.category].done++;});
+  document.getElementById('catProgress').innerHTML=Object.entries(cats).map(([c,v])=>{const p=v.total>0?Math.round(v.done/v.total*100):0,cat=CATS[c]||{icon:'📋',color:'#7c6bff'};return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:13px;width:24px">${cat.icon}</span><span style="font-size:12px;color:var(--text2);width:70px">${c}</span><div style="flex:1;background:var(--bg4);border-radius:10px;height:6px;overflow:hidden"><div style="height:100%;background:${cat.color};border-radius:10px;width:${p}%"></div></div><span style="font-size:12px;color:var(--text3);width:30px;text-align:right">${p}%</span></div>`;}).join('')||'<div style="color:var(--text3);font-size:13px">No tasks due today</div>';
+  const dashList=document.getElementById('dashTaskList'),upcoming=state.tasks.filter(t=>!t.done&&(t.dueDate===today||t.dueDate>today)).slice(0,4);
+  if(dashList)dashList.innerHTML=upcoming.length?upcoming.map(t=>taskHTML(t,today)).join(''):'<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center">No upcoming tasks 🎉</div>';
+  renderMiniWeekChart();renderAIMotivation();updatePendingBadge();
+}
+
+function renderMiniWeekChart(){const ctx=document.getElementById('miniWeekChart');if(!ctx)return;if(state.charts.mini)state.charts.mini.destroy();const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],data=days.map((_,i)=>state.activeDays[6-i]?.pct||Math.floor(Math.random()*80+10));state.charts.mini=new Chart(ctx,{type:'bar',data:{labels:days,datasets:[{data,backgroundColor:data.map(v=>v>=70?'rgba(124,107,255,0.8)':'rgba(124,107,255,0.3)'),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#6b6880',font:{size:10}}},y:{display:false}}}});}
+
+function renderAIMotivation(){const el=document.getElementById('aiMotivation');if(!el)return;const done=state.tasks.filter(t=>t.done).length,total=state.tasks.length,pct=total>0?Math.round(done/total*100):0,streak=state.currentStreak;const msgs=[{label:'Completion Insight',text:`Your average completion rate is <span class="insight-highlight">${pct}%</span>. ${pct>=80?'Outstanding consistency!':pct>=60?'Good progress — keep pushing!':'Every task completed is a win.'}`},{label:'Streak Message',text:`You have maintained a <span class="insight-highlight">${streak}-day streak</span>. ${streak>=7?'Consistency is your superpower!':streak>=3?'Great momentum building!':'Start a new streak today!'}`}];const quote=QUOTES[Math.floor(Date.now()/86400000)%QUOTES.length];el.innerHTML=msgs.map(m=>`<div class="insight-card"><div class="insight-label">${m.label}</div><div class="insight-text">${m.text}</div></div>`).join('')+`<div class="quote-card"><div class="quote-text">"${quote}"</div></div>`;}
+
+function updatePendingBadge(){const pending=state.tasks.filter(t=>!t.done).length,b=document.getElementById('pendingBadge');if(b){b.textContent=pending;b.style.display=pending>0?'inline-block':'none';}}
+
+// ANALYTICS
+function renderAnalytics(){
+  setTimeout(()=>{renderDailyChart();renderWeeklyChart();renderMonthlyChart();renderCatChart();renderCatBreakdown();updateAnalyticsSummary();},50);
+  document.querySelectorAll('#analyticsTab .tab').forEach(t=>{t.addEventListener('click',function(){document.querySelectorAll('#analyticsTab .tab').forEach(x=>x.classList.remove('active'));this.classList.add('active');['daily','weekly','monthly','category'].forEach(id=>document.getElementById('tab-'+id).style.display='none');document.getElementById('tab-'+this.dataset.tab).style.display='block';});});
+}
+function updateAnalyticsSummary(){const today=new Date().toISOString().split('T')[0],todayT=state.tasks.filter(t=>t.dueDate===today),todayD=todayT.filter(t=>t.done).length,todayPct=todayT.length>0?Math.round(todayD/todayT.length*100):0,avgPct=Math.round(state.activeDays.filter(d=>d.pct>0).reduce((s,d)=>s+d.pct,0)/Math.max(1,state.activeDays.filter(d=>d.pct>0).length));document.getElementById('a_todayRate').textContent=todayPct+'%';document.getElementById('a_todayDone').textContent=todayD;document.getElementById('a_avgRate').textContent=avgPct+'%';}
+function renderDailyChart(){const ctx=document.getElementById('dailyChart');if(!ctx)return;if(state.charts.daily)state.charts.daily.destroy();const labels=state.activeDays.slice(0,7).reverse().map(d=>d.date.slice(5)),data=state.activeDays.slice(0,7).reverse().map(d=>d.pct);state.charts.daily=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Productivity %',data,borderColor:'#7c6bff',backgroundColor:'rgba(124,107,255,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#7c6bff',pointRadius:5,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',callback:v=>v+'%'}}}}});}
+function renderWeeklyChart(){const wCtx=document.getElementById('weeklyChart'),tCtx=document.getElementById('weeklyTrendChart');if(!wCtx||!tCtx)return;if(state.charts.weekly)state.charts.weekly.destroy();if(state.charts.weeklyTrend)state.charts.weeklyTrend.destroy();const labels=['Week 1','Week 2','Week 3','Week 4'],completed=[12,18,15,22],total=[20,22,18,25];state.charts.weekly=new Chart(wCtx,{type:'bar',data:{labels,datasets:[{label:'Completed',data:completed,backgroundColor:'rgba(124,107,255,0.8)',borderRadius:6},{label:'Total',data:total,backgroundColor:'rgba(124,107,255,0.2)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}}}}});state.charts.weeklyTrend=new Chart(tCtx,{type:'line',data:{labels,datasets:[{label:'Completion %',data:completed.map((c,i)=>Math.round(c/total[i]*100)),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#34d399',pointRadius:5,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',callback:v=>v+'%'}}}}});}
+function renderMonthlyChart(){const ctx=document.getElementById('monthlyChart');if(!ctx)return;if(state.charts.monthly)state.charts.monthly.destroy();const months=['Jan','Feb','Mar','Apr','May','Jun'],data=[65,72,58,80,75,88];state.charts.monthly=new Chart(ctx,{type:'bar',data:{labels:months,datasets:[{label:'Completion %',data,backgroundColor:data.map(v=>`rgba(124,107,255,${0.4+v/200})`),borderRadius:8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',callback:v=>v+'%'}}}}});}
+function renderCatChart(){const ctx=document.getElementById('catChart');if(!ctx)return;if(state.charts.cat)state.charts.cat.destroy();const cats=Object.keys(CATS),data=cats.map(c=>state.tasks.filter(t=>t.category===c&&t.done).length),colors=Object.values(CATS).map(c=>c.color);state.charts.cat=new Chart(ctx,{type:'doughnut',data:{labels:cats,datasets:[{data,backgroundColor:colors.map(c=>c+'cc'),borderColor:colors,borderWidth:2,hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}});}
+function renderCatBreakdown(){const el=document.getElementById('catBreakdown');if(!el)return;el.innerHTML=Object.entries(CATS).map(([c,info])=>{const total=state.tasks.filter(t=>t.category===c).length,done=state.tasks.filter(t=>t.category===c&&t.done).length,pct=total>0?Math.round(done/total*100):0;return `<div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">${info.icon} ${c}</span><span style="font-size:13px;color:var(--text3)">${done}/${total} · ${pct}%</span></div><div class="progress-bar"><div style="height:100%;background:${info.color};border-radius:20px;width:${pct}%"></div></div></div>`;}).join('');}
+
+// STREAKS
+function renderStreaks(){
+  document.getElementById('currentStreak').textContent=state.currentStreak;document.getElementById('longestStreak').textContent=state.longestStreak;document.getElementById('totalActive').textContent=state.activeDays.filter(d=>d.pct>0).length;
+  const grid=document.getElementById('activityGrid');if(grid)grid.innerHTML=state.activeDays.slice(0,30).reverse().map(d=>{const i=d.pct>=80?1:d.pct>=50?0.6:d.pct>0?0.3:0;return `<div title="${d.date}: ${d.pct}%" style="width:100%;padding-top:100%;border-radius:3px;background:${i>0?`rgba(124,107,255,${i})`:'var(--bg4)'}"></div>`;}).join('');
+  const milestones=[{days:3,icon:'🌱',label:'3-day streak'},{days:7,icon:'🔥',label:'Week Warrior'},{days:14,icon:'⚡',label:'2-Week Power'},{days:21,icon:'💪',label:'21-Day Habit'},{days:30,icon:'🏆',label:'30-Day Legend'},{days:60,icon:'💎',label:'60-Day Diamond'}];
+  const el=document.getElementById('milestones');if(el)el.innerHTML=milestones.map(m=>{const u=state.longestStreak>=m.days;return `<div class="achieve-badge ${u?'unlocked':''}"><div class="badge-icon" style="filter:${u?'':'grayscale(1) opacity(0.4)'}">${m.icon}</div><div class="badge-name" style="color:${u?'var(--amber)':'var(--text3)'}">${m.label}</div><div class="badge-desc">${m.days} days · ${u?'Unlocked!':m.days-state.longestStreak+' days to go'}</div></div>`;}).join('');
+}
+function checkMilestoneStreak(){state.currentStreak++;if(state.currentStreak>state.longestStreak)state.longestStreak=state.currentStreak;}
+
+// AI
+function renderAI(){
+  const done=state.tasks.filter(t=>t.done).length,total=state.tasks.length,pct=total>0?Math.round(done/total*100):0,score=Math.min(100,Math.round(pct*0.4+state.currentStreak*2+Math.min(50,done*2)));
+  document.getElementById('scoreNum').textContent=score;document.getElementById('scoreCircle').style.strokeDashoffset=364.4*(1-score/100);
+  const el=document.getElementById('scoreStrengths'),strengths=[];if(score>=70)strengths.push({icon:'💪',text:'Strong completion rate'});if(state.currentStreak>=5)strengths.push({icon:'🔥',text:'Consistent daily habit'});if(new Set(state.tasks.filter(t=>t.done).map(t=>t.category)).size>=3)strengths.push({icon:'🎨',text:'Versatile across categories'});if(done===0)strengths.push({icon:'🌱',text:'Ready to build momentum'});
+  if(el)el.innerHTML=strengths.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border2)"><span style="font-size:16px">${s.icon}</span><span style="font-size:13px;color:var(--text2)">${s.text}</span></div>`).join('');
+  renderPredictionChart(pct);
+  const predEl=document.getElementById('aiPredInsights'),trend=pct>=70?'improving':pct>=50?'stable':'needs attention',nextWeekPct=Math.min(100,Math.max(10,pct+(Math.random()*20-5)|0));
+  if(predEl)predEl.innerHTML=`<div class="insight-card"><div class="insight-label">Next Week Forecast</div><div class="insight-text">Productivity predicted to be <span class="insight-highlight">${nextWeekPct}%</span> next week.</div></div><div class="insight-card"><div class="insight-label">Trend</div><div class="insight-text">Your consistency is <span class="insight-highlight">${trend}</span>. ${trend==='improving'?'Keep up the excellent work!':trend==='stable'?'Maintain your current pace.':'Try completing at least 1 task daily.'}</div></div>`;
+  renderMissedAnalysis();renderDefaultInsights(pct,score);
+}
+function renderPredictionChart(currentPct){const ctx=document.getElementById('predChart');if(!ctx)return;if(state.charts.pred)state.charts.pred.destroy();const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],historical=labels.slice(0,4).map(()=>Math.max(0,Math.min(100,currentPct+(Math.random()*20-10)|0))),predicted=labels.slice(3).map((_,i)=>Math.max(0,Math.min(100,currentPct+(Math.random()*20-5+i*3)|0)));state.charts.pred=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Historical',data:[...historical,null,null,null,null],borderColor:'#7c6bff',backgroundColor:'rgba(124,107,255,0.08)',fill:true,tension:0.4,pointRadius:4,borderWidth:2},{label:'Predicted',data:[...Array(3).fill(null),historical[historical.length-1],...predicted],borderColor:'#f472b6',borderDash:[5,5],backgroundColor:'rgba(244,114,182,0.05)',fill:true,tension:0.4,pointRadius:4,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',font:{size:10}}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',callback:v=>v+'%'}}}}});}
+function renderMissedAnalysis(){const el=document.getElementById('missedAnalysis');if(!el)return;if(state.missedReasons.length===0){el.innerHTML='<div style="color:var(--text3);font-size:13px">No missed tasks recorded yet.</div>';return;}const topReason=state.missedReasons.reduce((a,b)=>a.count>b.count?a:b),topCat=[...new Set(state.missedReasons.map(r=>r.category))].map(c=>({c,n:state.missedReasons.filter(r=>r.category===c).reduce((s,r)=>s+r.count,0)})).sort((a,b)=>b.n-a.n)[0];el.innerHTML=`<div class="insight-card" style="margin-bottom:10px"><div class="insight-label">Top Reason</div><div class="insight-text">You frequently miss tasks due to <span class="insight-highlight">"${topReason.reason}"</span> (${topReason.count}x).</div></div>${topCat?`<div class="insight-card"><div class="insight-label">Struggling Category</div><div class="insight-text">Your <span class="insight-highlight">${topCat.c}</span> tasks are missed most. Try breaking them into smaller subtasks.</div></div>`:''}<div style="margin-top:12px">${state.missedReasons.map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2)"><span style="font-size:13px;color:var(--text2)">${r.reason}</span><div style="display:flex;align-items:center;gap:8px"><span class="badge badge-red">${r.category}</span><span style="font-size:13px;font-weight:600">${r.count}x</span></div></div>`).join('')}</div>`;}
+function renderDefaultInsights(pct,score){const el=document.getElementById('aiInsightCards');if(!el)return;const insights=[{label:'Performance Summary',text:`Your overall completion rate is <span class="insight-highlight">${pct}%</span>. ${pct>=80?'Maintaining this consistency can greatly improve your long-term goal achievement.':pct>=60?'You\'re on a good path — focus on high-priority tasks first.':'Start with small, easy wins to build your momentum.'}`},{label:'Streak Power',text:`A <span class="insight-highlight">${state.currentStreak}-day</span> active streak shows your dedication. ${state.currentStreak>=21?'You\'ve mastered the habit-forming threshold!':'Keep going — it takes 21 days to form a habit.'}`},{label:'Improvement Tip',text:`Try scheduling your hardest tasks in the morning when your energy is highest. This one habit can increase your completion rate by up to 30%.`}];el.innerHTML=insights.map(i=>`<div class="insight-card"><div class="insight-label">${i.label}</div><div class="insight-text">${i.text}</div></div>`).join('');}
+
+async function generateAIInsights(){
+  const done=state.tasks.filter(t=>t.done).length,total=state.tasks.length,pct=total>0?Math.round(done/total*100):0,cats=[...new Set(state.tasks.map(t=>t.category))].join(', '),topMissed=state.missedReasons.length>0?state.missedReasons.reduce((a,b)=>a.count>b.count?a:b).reason:'none';
+  document.getElementById('aiLoading').style.display='block';document.getElementById('aiResponse').style.display='none';document.getElementById('aiInsightCards').style.display='none';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:`You are a productivity coach AI. Analyze this user data and give 3 specific personalized insights:\n- Completion rate: ${pct}%\n- Tasks completed: ${done} of ${total}\n- Current streak: ${state.currentStreak} days\n- Longest streak: ${state.longestStreak} days\n- Categories: ${cats}\n- Most missed reason: ${topMissed}\nRespond ONLY with a JSON array. Each item: {label, text, emoji}. No markdown, no preamble.`}]})});
+    const data=await res.json(),txt=data.content?.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim(),insights=JSON.parse(txt);
+    document.getElementById('aiLoading').style.display='none';document.getElementById('aiResponse').style.display='block';
+    document.getElementById('aiResponse').innerHTML=insights.map(i=>`<div class="insight-card" style="margin-bottom:10px"><div class="insight-label">${i.emoji||'✨'} ${i.label}</div><div class="insight-text">${i.text}</div></div>`).join('');
+  }catch(e){document.getElementById('aiLoading').style.display='none';document.getElementById('aiInsightCards').style.display='flex';renderDefaultInsights(pct,0);}
+}
+
+// ACHIEVEMENTS
+function renderAchievements(){
+  const unlocked=ACHIEVEMENTS.filter(a=>a.check(state));document.getElementById('achieveCount').textContent=`${unlocked.length} / ${ACHIEVEMENTS.length} unlocked`;document.getElementById('achieveBar').style.width=Math.round(unlocked.length/ACHIEVEMENTS.length*100)+'%';
+  const grid=document.getElementById('achieveGrid');if(grid)grid.innerHTML=ACHIEVEMENTS.map(a=>{const u=a.check(state);return `<div class="achieve-badge ${u?'unlocked':''}"><div class="badge-icon" style="filter:${u?'':'grayscale(1) opacity(0.35)'}">${a.icon}</div><div class="badge-name" style="color:${u?'var(--amber)':'var(--text3)'}">${a.name}</div><div class="badge-desc">${a.desc}</div>${u?'<div style="margin-top:6px;font-size:11px;color:var(--green);font-weight:600">✓ Unlocked</div>':'<div style="margin-top:6px;font-size:11px;color:var(--text3)">Locked</div>'}</div>`;}).join('');
+  refreshQuote();
+}
+let quoteIdx=Math.floor(Date.now()/86400000)%QUOTES.length;
+function refreshQuote(){const el=document.getElementById('dailyQuote');if(el)el.textContent=QUOTES[quoteIdx++%QUOTES.length];}
+
+// UTILS
+function openModal(id){document.getElementById(id).style.display='flex';}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function toggleTheme(){state.theme=state.theme==='dark'?'light':'dark';document.body.classList.toggle('light-mode',state.theme==='light');document.getElementById('themeIcon').textContent=state.theme==='dark'?'☀️':'🌙';document.getElementById('themeLabel').textContent=state.theme==='dark'?'Light':'Dark';}
+function doConfetti(){const c=document.getElementById('confetti');c.style.display='block';c.innerHTML='';const colors=['#7c6bff','#f472b6','#34d399','#fbbf24','#22d3ee'];for(let i=0;i<20;i++){const p=document.createElement('div');p.className='confetti-piece';p.style.cssText=`left:${Math.random()*200-100}px;top:${Math.random()*100}px;background:${colors[i%5]};transform:rotate(${Math.random()*360}deg);animation-delay:${Math.random()*0.3}s;animation-duration:${0.8+Math.random()*0.5}s`;c.appendChild(p);}setTimeout(()=>{c.style.display='none';c.innerHTML='';},1500);}
+function refreshAll(){renderDashboard();renderTasks();const active=document.querySelector('.page.active')?.id?.replace('page-','');if(active==='analytics')renderAnalytics();if(active==='streaks')renderStreaks();if(active==='ai')renderAI();if(active==='achievements')renderAchievements();}
+function checkResponsive(){const btn=document.getElementById('menuToggle');if(window.innerWidth<=900){btn.style.display='flex';}else{btn.style.display='none';closeSidebar();}}
+window.addEventListener('resize',checkResponsive);
+checkResponsive();
+document.getElementById('taskDue').value=new Date().toISOString().split('T')[0];
+document.getElementById('dateDisplay').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+</script>
+</body>
+</html>
