@@ -584,7 +584,7 @@
       <div style="font-size:11px;color:var(--text3);margin-top:4px">E.g. select Mon/Wed/Fri for a recurring workout. Leave blank for a one-off task.</div>
     </div>
     <div class="form-group"><label>Repeat if missed (days)</label><input type="number" id="taskRepeat" min="0" placeholder="0" value="0">
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">If you miss this task, it'll carry over to the next day for this many days.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">If you mark this task as missed, it'll carry over to the next day for this many days.</div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal('taskModal')">Cancel</button>
@@ -632,7 +632,7 @@
     <div class="form-group"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
     <div id="authError" style="color:var(--red);font-size:13px;margin-bottom:10px;display:none"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="handleAuth()" id="authBtn">Log in</button>
-    <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--text3)">Demo: any email & password (6+ chars)</div>
+    <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--text3)">New here? Switch to "Sign up" to create your account first.</div>
   </div>
 </div>
 
@@ -712,54 +712,99 @@ function switchAuth(mode){
   document.getElementById('authError').style.display='none';
 }
 
+// Accounts are stored locally, keyed by email. Each account has its own saved data.
+// NOTE: this is a client-side demo — passwords are stored in localStorage in plain text,
+// which is fine for a local prototype but should never be done in a real production app.
+function getAccounts(){
+  try{ return JSON.parse(localStorage.getItem('fp_accounts')||'{}'); }catch(e){ return {}; }
+}
+function saveAccounts(accounts){
+  localStorage.setItem('fp_accounts', JSON.stringify(accounts));
+}
+
 function handleAuth(){
-  const email = document.getElementById('authEmail').value.trim();
+  const email = document.getElementById('authEmail').value.trim().toLowerCase();
   const pass = document.getElementById('authPass').value;
   const name = document.getElementById('authName').value.trim();
   const errEl = document.getElementById('authError');
+  errEl.style.display='none';
+
   if(!email || !email.includes('@')){errEl.textContent='Enter a valid email';errEl.style.display='block';return;}
   if(pass.length < 6){errEl.textContent='Password must be 6+ characters';errEl.style.display='block';return;}
-  const displayName = authMode==='signup' ? (name||email.split('@')[0]) : email.split('@')[0];
-  state.user = {name: displayName, email, initials: displayName.slice(0,2).toUpperCase()};
+
+  const accounts = getAccounts();
+
+  if(authMode==='signup'){
+    if(accounts[email]){
+      errEl.textContent='An account with this email already exists. Please log in instead.';
+      errEl.style.display='block';
+      return;
+    }
+    const displayName = name || email.split('@')[0];
+    accounts[email] = { password: pass, name: displayName, initials: displayName.slice(0,2).toUpperCase() };
+    saveAccounts(accounts);
+    loginUser(email, accounts[email], true);
+  } else {
+    if(!accounts[email]){
+      errEl.textContent='No account found for this email. Please sign up first.';
+      errEl.style.display='block';
+      return;
+    }
+    if(accounts[email].password !== pass){
+      errEl.textContent='Incorrect password. Please try again.';
+      errEl.style.display='block';
+      return;
+    }
+    loginUser(email, accounts[email], false);
+  }
+}
+
+// Logs a user in, loads their saved data (or starts empty for a brand-new account),
+// and remembers the session so the login screen won't show again on next visit.
+function loginUser(email, account, isNewAccount){
+  state.user = { name: account.name, email, initials: account.initials };
+  localStorage.setItem('fp_session', email);
   document.getElementById('userAvatar').textContent = state.user.initials;
   document.getElementById('userName').textContent = state.user.name;
   document.getElementById('userEmail').textContent = state.user.email;
   closeModal('authModal');
-  seedDemoData();
+  loadUserData(email, isNewAccount);
   refreshAll();
 }
 
-function logout(){
-  if(!confirm('Log out? Your data will stay saved on this device for next time.')) return;
-  localStorage.removeItem('fp_user');
-  localStorage.removeItem('fp_data');
-  location.reload();
+// Loads this user's own tasks from storage. Brand-new accounts start completely empty —
+// no demo/sample tasks — so every stat, chart, and streak is driven only by what the user adds.
+function loadUserData(email, isNewAccount){
+  if(isNewAccount){
+    state.tasks = [];
+    state.missedReasons = [];
+    nextId = 1;
+    return;
+  }
+  try{
+    const d = localStorage.getItem('fp_data_'+email);
+    if(d){
+      const data = JSON.parse(d);
+      state.tasks = data.tasks || [];
+      state.missedReasons = data.missedReasons || [];
+      nextId = data.nextId || 1;
+    } else {
+      state.tasks = [];
+      state.missedReasons = [];
+      nextId = 1;
+    }
+  }catch(e){
+    console.error('Could not load saved data', e);
+    state.tasks = [];
+    state.missedReasons = [];
+    nextId = 1;
+  }
 }
 
-// ============ SEED DEMO DATA ============
-function seedDemoData(){
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
-  state.tasks = [
-    {id:1,title:'Review lecture notes',desc:'Chapter 5 and 6',category:'Study',priority:'high',dueDate:today,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
-    {id:2,title:'Build REST API endpoint',desc:'User authentication routes',category:'Coding',priority:'high',dueDate:today,done:false,createdAt:new Date(Date.now()-86400000).toISOString()},
-    {id:3,title:'Morning run 5km',desc:'',category:'Exercise',priority:'medium',dueDate:today,done:true,createdAt:new Date(Date.now()-86400000).toISOString()},
-    {id:4,title:'Prepare weekly report',desc:'Sales & marketing metrics',category:'Work',priority:'medium',dueDate:today,done:false,createdAt:new Date().toISOString()},
-    {id:5,title:'Read 20 pages',desc:'Atomic Habits',category:'Personal',priority:'low',dueDate:yesterday,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
-    {id:6,title:'Practice algorithms',desc:'LeetCode medium problems',category:'Coding',priority:'high',dueDate:yesterday,done:true,createdAt:new Date(Date.now()-172800000).toISOString()},
-    {id:7,title:'Yoga session',desc:'30 minutes flow',category:'Exercise',priority:'low',dueDate:yesterday,done:false,missedReason:'Lack of time',reasonAsked:true,repeatDays:0,repeatRemaining:0,createdAt:new Date(Date.now()-172800000).toISOString()},
-    {id:8,title:'Math homework',desc:'Calculus chapter 3',category:'Study',priority:'high',dueDate:new Date(Date.now()+86400000).toISOString().split('T')[0],done:false,createdAt:new Date().toISOString()},
-    {id:9,title:'Team standup prep',desc:'Review blockers',category:'Work',priority:'medium',dueDate:new Date(Date.now()+86400000).toISOString().split('T')[0],done:false,createdAt:new Date().toISOString()},
-  ];
-  state.missedReasons = [{reason:'Lack of time',category:'Exercise',count:3},{reason:'Low motivation',category:'Exercise',count:2},{reason:'Forgot',category:'Study',count:1}];
-  state.activeDays = [];
-  for(let i=0;i<30;i++){
-    const d = new Date(Date.now() - i*86400000);
-    const pct = i===0?60:i===1?100:i===2?80:Math.random()>0.3?Math.floor(Math.random()*80+20):0;
-    state.activeDays.push({date:d.toISOString().split('T')[0], pct});
-  }
-  state.currentStreak = 5;
-  state.longestStreak = 12;
+function logout(){
+  if(!confirm('Log out? Your account and data stay saved — just log back in anytime with the same email and password.')) return;
+  localStorage.removeItem('fp_session');
+  location.reload();
 }
 
 // ============ NAVIGATION ============
@@ -774,7 +819,6 @@ function navigate(page){
   if(page==='streaks') renderStreaks();
   if(page==='ai') renderAI();
   if(page==='achievements') renderAchievements();
-  if(page==='tasks') checkMissedTasks();
   if(window.innerWidth<=900){
     document.getElementById('sidebar').classList.remove('open');
     const ov=document.getElementById('sidebarOverlay');
@@ -870,42 +914,36 @@ function deleteTask(id){
 function toggleTask(id){
   const t = state.tasks.find(t=>t.id===id);
   if(!t) return;
+  const prevStreak = state.currentStreak;
   if(!t.done){
     t.done=true;
+    t.completedAt=new Date().toISOString();
     confetti();
-    checkMilestoneStreak();
   } else {
     t.done=false;
+    t.completedAt=null;
+  }
+  computeStreaks();
+  if(state.currentStreak>prevStreak && [3,7,14,21,30,60].includes(state.currentStreak)){
+    confetti();
   }
   refreshAll();
 }
 
-// ============ MISSED TASK DETECTION (auto reason prompt + repeat carry-over) ============
-let missedQueue = [];
-
-function checkMissedTasks(){
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const isLateInDay = now.getHours() >= 20; // after 8 PM, treat today's unfinished tasks as at risk of being missed too
-  missedQueue = state.tasks
-    .filter(t=>!t.done && t.dueDate && !t.reasonAsked && (t.dueDate < today || (t.dueDate === today && isLateInDay)))
-    .map(t=>t.id);
-  if(missedQueue.length>0) processNextMissed();
-}
-
-function processNextMissed(){
-  if(missedQueue.length===0) return;
-  const t = state.tasks.find(x=>x.id===missedQueue[0]);
-  if(!t){ missedQueue.shift(); processNextMissed(); return; }
+// ============ MISSED TASK HANDLING (fully user-initiated, not automatic) ============
+// The app never decides on its own that a task was "missed" and never pops the reason
+// modal automatically based on the date/time. The user marks a task as missed themselves
+// (via the ❓ button that appears on overdue, unfinished tasks) — only then is a reason
+// collected and only then do the missed-task stats/charts update.
+function markMissed(id){
+  const t = state.tasks.find(x=>x.id===id);
+  if(!t || t.done || t.missedReason) return;
   openReasonModal(t);
 }
 
 function openReasonModal(task){
   state.currentTaskId = task.id;
-  const today = new Date().toISOString().split('T')[0];
-  const questionText = task.dueDate === today
-    ? `Looks like you haven't finished "${task.title}" today. Why did you miss it?`
-    : `Why did you miss "${task.title}"?`;
+  const questionText = `You marked "${task.title}" as missed. Why did you miss it?`;
   document.getElementById('reasonTaskName').textContent = questionText;
   document.getElementById('customReason').value='';
   const btns = document.getElementById('reasonButtons');
@@ -956,28 +994,123 @@ function finalizeMissedTask(task, reason){
 
 function submitReason(){
   const custom = document.getElementById('customReason').value.trim();
-  const reason = custom || state.selectedReason;
+  const reason = custom || state.selectedReason || 'Not specified';
   const t = state.tasks.find(x=>x.id===state.currentTaskId);
-  if(t) finalizeMissedTask(t, reason || null);
+  if(t) finalizeMissedTask(t, reason);
   closeModal('reasonModal');
-  advanceMissedQueue();
+  state.currentTaskId = null;
+  refreshAll();
 }
 
 function skipReason(){
   const t = state.tasks.find(x=>x.id===state.currentTaskId);
-  if(t) finalizeMissedTask(t, null);
+  if(t) finalizeMissedTask(t, 'Not specified');
   closeModal('reasonModal');
-  advanceMissedQueue();
+  state.currentTaskId = null;
+  refreshAll();
 }
 
-function advanceMissedQueue(){
-  missedQueue = missedQueue.filter(id=>id!==state.currentTaskId);
-  state.currentTaskId = null;
-  if(missedQueue.length>0){
-    processNextMissed();
-  } else {
-    refreshAll();
+// ============ REAL DATA COMPUTATION (streaks, activity, weekly/monthly stats) ============
+// Everything below is derived only from the tasks the user actually created and completed —
+// there is no seeded/sample/random data feeding the charts or streaks.
+
+function computeStreaks(){
+  // A day counts as "active" if the user completed at least one task on that calendar day.
+  const completedDates = new Set(
+    state.tasks.filter(t=>t.done && t.completedAt).map(t=>t.completedAt.split('T')[0])
+  );
+
+  // Current streak: consecutive active days ending today.
+  let current = 0;
+  let d = new Date();
+  while(true){
+    const ds = d.toISOString().split('T')[0];
+    if(completedDates.has(ds)){
+      current++;
+      d.setDate(d.getDate()-1);
+    } else break;
   }
+
+  // Longest streak: scan all active days for the longest consecutive run.
+  const sortedDates = Array.from(completedDates).sort();
+  let longest = 0, run = 0, prev = null;
+  sortedDates.forEach(ds=>{
+    if(prev){
+      const diffDays = Math.round((new Date(ds) - new Date(prev)) / 86400000);
+      run = diffDays === 1 ? run + 1 : 1;
+    } else {
+      run = 1;
+    }
+    longest = Math.max(longest, run);
+    prev = ds;
+  });
+
+  state.currentStreak = current;
+  state.longestStreak = Math.max(longest, current);
+}
+
+function computeDayPct(dateStr){
+  const dayTasks = state.tasks.filter(t=>t.dueDate===dateStr);
+  if(dayTasks.length===0) return null; // no tasks that day = no data, not 0%
+  const done = dayTasks.filter(t=>t.done).length;
+  return Math.round(done/dayTasks.length*100);
+}
+
+function computeActiveDays(days){
+  const arr=[];
+  for(let i=0;i<days;i++){
+    const d = new Date(Date.now() - i*86400000);
+    const dateStr = d.toISOString().split('T')[0];
+    const pct = computeDayPct(dateStr);
+    arr.push({ date: dateStr, pct: pct===null?0:pct, hasData: pct!==null });
+  }
+  return arr;
+}
+
+function getWeekBounds(offsetWeeks){
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = (day===0? -6 : 1-day);
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday - offsetWeeks*7);
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate()+6);
+  return {start:monday, end:sunday};
+}
+
+function computeWeeklyStats(weeksBack){
+  const results=[];
+  for(let w=weeksBack-1; w>=0; w--){
+    const {start,end} = getWeekBounds(w);
+    const tasksInWeek = state.tasks.filter(t=>{
+      if(!t.dueDate) return false;
+      const d = new Date(t.dueDate+'T00:00:00');
+      return d>=start && d<=end;
+    });
+    const total = tasksInWeek.length;
+    const done = tasksInWeek.filter(t=>t.done).length;
+    const label = w===0 ? 'This week' : `Week of ${start.toISOString().split('T')[0].slice(5)}`;
+    results.push({label, total, done});
+  }
+  return results;
+}
+
+function computeMonthlyStats(monthsBack){
+  const results=[];
+  const now = new Date();
+  for(let m=monthsBack-1; m>=0; m--){
+    const d = new Date(now.getFullYear(), now.getMonth()-m, 1);
+    const y = d.getFullYear(), mo = d.getMonth();
+    const tasksInMonth = state.tasks.filter(t=>{
+      if(!t.dueDate) return false;
+      const td = new Date(t.dueDate+'T00:00:00');
+      return td.getFullYear()===y && td.getMonth()===mo;
+    });
+    const total = tasksInMonth.length;
+    const done = tasksInMonth.filter(t=>t.done).length;
+    results.push({ label: d.toLocaleDateString('en-US',{month:'short'}), pct: total>0?Math.round(done/total*100):0 });
+  }
+  return results;
 }
 
 // ============ RENDER TASKS ============
@@ -1024,6 +1157,7 @@ function taskHTML(t, today){
       </div>
     </div>
     <div class="task-actions">
+      ${overdue && !t.missedReason ? `<button class="btn-icon" onclick="markMissed(${t.id})" title="Mark as missed" style="color:var(--amber)">❓</button>` : ''}
       <button class="btn-icon" onclick="openEditTask(${t.id})" title="Edit">✏️</button>
       <button class="btn-icon" onclick="deleteTask(${t.id})" title="Delete" style="color:var(--red)">🗑️</button>
     </div>
@@ -1088,7 +1222,7 @@ function renderMiniWeekChart(){
   if(!ctx) return;
   if(state.charts.mini) state.charts.mini.destroy();
   const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const data = days.map((_,i)=>state.activeDays[6-i]?.pct||Math.floor(Math.random()*80+10));
+  const data = days.map((_,i)=>state.activeDays[6-i]?.pct||0);
   state.charts.mini = new Chart(ctx,{
     type:'bar',
     data:{labels:days,datasets:[{data,backgroundColor:data.map(v=>v>=70?'rgba(124,107,255,0.8)':'rgba(124,107,255,0.3)'),borderRadius:4}]},
@@ -1144,7 +1278,8 @@ function updateAnalyticsSummary(){
   const todayT = state.tasks.filter(t=>t.dueDate===today);
   const todayD = todayT.filter(t=>t.done).length;
   const todayPct = todayT.length>0?Math.round(todayD/todayT.length*100):0;
-  const avgPct = Math.round(state.activeDays.filter(d=>d.pct>0).reduce((s,d)=>s+d.pct,0)/Math.max(1,state.activeDays.filter(d=>d.pct>0).length));
+  const daysWithData = state.activeDays.filter(d=>d.hasData);
+  const avgPct = daysWithData.length>0 ? Math.round(daysWithData.reduce((s,d)=>s+d.pct,0)/daysWithData.length) : 0;
   document.getElementById('a_todayRate').textContent=todayPct+'%';
   document.getElementById('a_todayDone').textContent=todayD;
   document.getElementById('a_avgRate').textContent=avgPct+'%';
@@ -1169,8 +1304,10 @@ function renderWeeklyChart(){
   if(!wCtx||!tCtx) return;
   if(state.charts.weekly) state.charts.weekly.destroy();
   if(state.charts.weeklyTrend) state.charts.weeklyTrend.destroy();
-  const labels=['Week 1','Week 2','Week 3','Week 4'];
-  const completed=[12,18,15,22];const total=[20,22,18,25];
+  const weekStats = computeWeeklyStats(4);
+  const labels = weekStats.map(w=>w.label);
+  const completed = weekStats.map(w=>w.done);
+  const total = weekStats.map(w=>w.total);
   state.charts.weekly=new Chart(wCtx,{
     type:'bar',
     data:{labels,datasets:[
@@ -1181,7 +1318,7 @@ function renderWeeklyChart(){
   });
   state.charts.weeklyTrend=new Chart(tCtx,{
     type:'line',
-    data:{labels,datasets:[{label:'Completion %',data:completed.map((c,i)=>Math.round(c/total[i]*100)),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#34d399',pointRadius:5,borderWidth:2}]},
+    data:{labels,datasets:[{label:'Completion %',data:completed.map((c,i)=>total[i]>0?Math.round(c/total[i]*100):0),borderColor:'#34d399',backgroundColor:'rgba(52,211,153,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#34d399',pointRadius:5,borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#6b6880',callback:v=>v+'%'}}}}
   });
 }
@@ -1190,8 +1327,9 @@ function renderMonthlyChart(){
   const ctx = document.getElementById('monthlyChart');
   if(!ctx) return;
   if(state.charts.monthly) state.charts.monthly.destroy();
-  const months=['Jan','Feb','Mar','Apr','May','Jun'];
-  const data=[65,72,58,80,75,88];
+  const monthStats = computeMonthlyStats(6);
+  const months = monthStats.map(m=>m.label);
+  const data = monthStats.map(m=>m.pct);
   state.charts.monthly=new Chart(ctx,{
     type:'bar',
     data:{labels:months,datasets:[{label:'Completion %',data,backgroundColor:data.map(v=>`rgba(124,107,255,${0.4+v/200})`),borderRadius:8}]},
@@ -1261,18 +1399,6 @@ function renderStreaks(){
       <div class="badge-desc">${m.days} days · ${unlocked?'Unlocked!':m.days-state.longestStreak+' days to go'}</div>
     </div>`;
   }).join('');
-}
-
-function checkMilestoneStreak(){
-  state.currentStreak++;
-  if(state.currentStreak>state.longestStreak) state.longestStreak=state.currentStreak;
-  const milestones=[3,7,14,21,30];
-  if(milestones.includes(state.currentStreak)) showMilestoneMessage(state.currentStreak);
-}
-
-function showMilestoneMessage(days){
-  const icons={3:'🌱',7:'🔥',14:'⚡',21:'💪',30:'🏆'};
-  confetti();
 }
 
 // ============ AI PAGE ============
@@ -1464,6 +1590,8 @@ function confetti(){
 }
 
 function refreshAll(){
+  computeStreaks();
+  state.activeDays = computeActiveDays(30);
   renderDashboard();
   renderTasks();
   const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
@@ -1472,43 +1600,20 @@ function refreshAll(){
   if(activePage==='ai') renderAI();
   if(activePage==='achievements') renderAchievements();
   saveToStorage();
-  checkMissedTasks();
 }
 
-// ============ PERSISTENCE (stay logged in + remember data) ============
+// ============ PERSISTENCE (per-account data + remembered session) ============
+// Streaks and activity are recomputed from tasks on load, so only the raw task data
+// needs to be saved — that's also what keeps the numbers always accurate to what's stored.
 function saveToStorage(){
   try{
     if(!state.user) return;
-    localStorage.setItem('fp_user', JSON.stringify(state.user));
-    localStorage.setItem('fp_data', JSON.stringify({
+    localStorage.setItem('fp_data_'+state.user.email, JSON.stringify({
       tasks: state.tasks,
       missedReasons: state.missedReasons,
-      currentStreak: state.currentStreak,
-      longestStreak: state.longestStreak,
-      activeDays: state.activeDays,
       nextId: nextId
     }));
   }catch(e){ console.error('Could not save data', e); }
-}
-
-function loadFromStorage(){
-  try{
-    const u = localStorage.getItem('fp_user');
-    const d = localStorage.getItem('fp_data');
-    if(!u || !d) return false;
-    state.user = JSON.parse(u);
-    const data = JSON.parse(d);
-    state.tasks = data.tasks || [];
-    state.missedReasons = data.missedReasons || [];
-    state.currentStreak = data.currentStreak || 0;
-    state.longestStreak = data.longestStreak || 0;
-    state.activeDays = data.activeDays || [];
-    nextId = data.nextId || 10;
-    return true;
-  }catch(e){
-    console.error('Could not load saved data', e);
-    return false;
-  }
 }
 
 // Date display
@@ -1538,21 +1643,25 @@ document.getElementById('taskDue').value=new Date().toISOString().split('T')[0];
 setDateDisplay();
 
 // ============ AUTO LOGIN ON RETURN VISIT ============
+// If this browser already has a remembered session AND that account still exists,
+// log straight back in and skip the auth screen entirely. Otherwise the auth modal
+// (shown by default in the HTML) stays visible so the person can log in or sign up.
 (function initApp(){
-  const loaded = loadFromStorage();
-  if(loaded && state.user){
+  const session = localStorage.getItem('fp_session');
+  const accounts = getAccounts();
+  if(session && accounts[session]){
+    state.user = { name: accounts[session].name, email: session, initials: accounts[session].initials };
     document.getElementById('authModal').style.display='none';
     document.getElementById('userAvatar').textContent = state.user.initials;
     document.getElementById('userName').textContent = state.user.name;
     document.getElementById('userEmail').textContent = state.user.email;
-    checkMissedTasks();
+    loadUserData(session, false);
     refreshAll();
+  } else if(session){
+    // Stale session pointing at an account that no longer exists — clear it so the login modal shows.
+    localStorage.removeItem('fp_session');
   }
-  // else: no saved session found, the login/signup modal (shown by default) stays visible
 })();
-
-// Re-check for newly missed tasks periodically (catches the day rolling over while the app stays open)
-setInterval(()=>{ if(state.user) checkMissedTasks(); }, 60000);
 </script>
 </body>
 </html>
